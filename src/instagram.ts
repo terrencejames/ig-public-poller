@@ -53,7 +53,7 @@ function toPermalink(shortcode: string): string {
   return `https://www.instagram.com/p/${shortcode}/`;
 }
 
-export function extractLatestPostFromSharedData(data: any): InstagramPost | null {
+export function extractRecentPostsFromSharedData(data: any, limit: number = 5): InstagramPost[] {
   // Support both conventional _sharedData and GraphQL XHR intercept formats
   let edges = data?.entry_data?.ProfilePage?.[0]?.graphql?.user?.edge_owner_to_timeline_media?.edges;
 
@@ -64,7 +64,7 @@ export function extractLatestPostFromSharedData(data: any): InstagramPost | null
     edges = data?.data?.user?.edge_web_feed_timeline?.edges;
   }
 
-  if (!Array.isArray(edges) || edges.length === 0) return null;
+  if (!Array.isArray(edges) || edges.length === 0) return [];
 
   // Pinned posts sit at index 0-2. Sort all nodes by taken_at_timestamp descending to guarantee the chronologically latest post.
   const validNodes = edges
@@ -77,44 +77,43 @@ export function extractLatestPostFromSharedData(data: any): InstagramPost | null
     return timeB - timeA;
   });
 
-  const node = validNodes[0];
-  if (!node) return null;
+  return validNodes.slice(0, limit).map(node => {
+    const shortcode = node.shortcode;
 
-  const shortcode = node.shortcode;
+    let caption =
+      node.edge_media_to_caption?.edges?.[0]?.node?.text ??
+      node.caption?.text ??
+      (typeof node.caption === "string" ? node.caption : undefined);
 
-  let caption =
-    node.edge_media_to_caption?.edges?.[0]?.node?.text ??
-    node.caption?.text ??
-    (typeof node.caption === "string" ? node.caption : undefined);
+    // Instagram sometimes sticks its auto-generated alt-text in legacy fields
+    if (caption && (caption.startsWith("Photo by ") || caption.includes("May be an image of "))) {
+      caption = undefined;
+    }
 
-  // Instagram sometimes sticks its auto-generated alt-text in legacy fields
-  if (caption && (caption.startsWith("Photo by ") || caption.includes("May be an image of "))) {
-    caption = undefined;
-  }
+    const permalink = toPermalink(shortcode);
 
-  const permalink = toPermalink(shortcode);
+    // Prefer display_url (static images/carousels), fallback to thumbnail_src.
+    let mediaUrl: string | undefined;
 
-  // Prefer display_url (static images/carousels), fallback to thumbnail_src.
-  let mediaUrl: string | undefined;
+    const sidecarEdges = node.edge_sidecar_to_children?.edges;
+    if (Array.isArray(sidecarEdges) && sidecarEdges.length > 0) {
+      const firstChild = sidecarEdges[0]?.node;
+      mediaUrl = firstChild?.display_url ?? firstChild?.thumbnail_src ?? node.thumbnail_src ?? undefined;
+    } else {
+      mediaUrl = node.display_url ?? node.thumbnail_src ?? node.thumbnail_resources?.[0]?.src ?? undefined;
+    }
 
-  const sidecarEdges = node.edge_sidecar_to_children?.edges;
-  if (Array.isArray(sidecarEdges) && sidecarEdges.length > 0) {
-    const firstChild = sidecarEdges[0]?.node;
-    mediaUrl = firstChild?.display_url ?? firstChild?.thumbnail_src ?? node.thumbnail_src ?? undefined;
-  } else {
-    mediaUrl = node.display_url ?? node.thumbnail_src ?? node.thumbnail_resources?.[0]?.src ?? undefined;
-  }
-
-  return {
-    shortcode,
-    permalink,
-    caption,
-    mediaUrl,
-    timestamp: node.taken_at_timestamp ? Number(node.taken_at_timestamp) : undefined,
-  };
+    return {
+      shortcode,
+      permalink,
+      caption,
+      mediaUrl,
+      timestamp: node.taken_at_timestamp ? Number(node.taken_at_timestamp) : undefined,
+    };
+  });
 }
 
-export async function fetchLatestInstagramPost(profileUrl: string): Promise<InstagramPost> {
+export async function fetchRecentInstagramPosts(profileUrl: string): Promise<InstagramPost[]> {
   const isGitHubActions = Boolean(process.env.GITHUB_ACTIONS);
 
   const browser = await chromium.launch({
@@ -169,88 +168,88 @@ export async function fetchLatestInstagramPost(profileUrl: string): Promise<Inst
     }
 
     // Attempt to extract from DOM manually if GraphQL intercept failed
-    let post: InstagramPost | null = null;
+    let posts: InstagramPost[] = [];
 
     if (graphqlData) {
-      post = extractLatestPostFromSharedData(graphqlData);
+      posts = extractRecentPostsFromSharedData(graphqlData, 5);
     }
 
     // If intercept failed (perhaps it was baked into the HTML and didn't fire an XHR)
-    if (!post) {
+    if (posts.length === 0) {
       const html = await page.content();
       const sharedData = extractJsonObjectAfterMarker(html, "window._sharedData =");
-      post = sharedData ? extractLatestPostFromSharedData(sharedData) : null;
+      posts = sharedData ? extractRecentPostsFromSharedData(sharedData, 5) : [];
 
       // Fallback 2: Polaris embedded data
-      if (!post) {
+      if (posts.length === 0) {
         const polarisData = extractJsonObjectAfterMarker(html, "\"edge_owner_to_timeline_media\":");
         if (polarisData) {
           // Mocks the structure
-          post = extractLatestPostFromSharedData({ entry_data: { ProfilePage: [{ graphql: { user: { edge_owner_to_timeline_media: polarisData } } }] } });
+          posts = extractRecentPostsFromSharedData({ entry_data: { ProfilePage: [{ graphql: { user: { edge_owner_to_timeline_media: polarisData } } }] } }, 5);
         }
       }
 
       // Fallback 3: Pure DOM scraping
-      if (!post) {
-        post = await page.evaluate(() => {
+      if (posts.length === 0) {
+        posts = await page.evaluate(() => {
           // Grab all post anchors
           const allLinks = Array.from(document.querySelectorAll("a[href*='/p/']"));
 
           // Filter out pinned posts (they usually enclose an SVG with a 'Pinned' or similar aria label/title)
-          let targetLink = allLinks.find(link => {
+          let targetLinks = allLinks.filter(link => {
             const hasAriaPin = link.querySelector("svg[aria-label='Pinned']");
             const hasTitlePin = Array.from(link.querySelectorAll("title")).some(t => t.textContent?.includes("Pinned"));
             return !hasAriaPin && !hasTitlePin;
           });
 
-          // Fallback to first if all somehow look pinned or logic fails
-          if (!targetLink) {
-            targetLink = allLinks[0];
+          // Fallback to all if everything looks pinned
+          if (targetLinks.length === 0) {
+            targetLinks = allLinks;
           }
 
-          if (!targetLink) return null;
-          console.log(targetLink);
-          const img = targetLink.querySelector("img");
-          let mediaUrl = img ? img.src : undefined;
+          return targetLinks.slice(0, 5).map(targetLink => {
+            const img = targetLink.querySelector("img");
+            let mediaUrl = img ? img.src : undefined;
 
-          // Instagram sometimes uses picture > img or background-image
-          if (!mediaUrl) {
-            const alternateImg = targetLink.querySelector("img[crossorigin], img[decoding]");
-            if (alternateImg) mediaUrl = (alternateImg as HTMLImageElement).src;
-          }
+            // Instagram sometimes uses picture > img or background-image
+            if (!mediaUrl) {
+              const alternateImg = targetLink.querySelector("img[crossorigin], img[decoding]");
+              if (alternateImg) mediaUrl = (alternateImg as HTMLImageElement).src;
+            }
 
-          let caption = img ? img.alt : undefined;
-          if (caption && (caption.startsWith("Photo by ") || caption.includes("May be an image of "))) {
-            caption = undefined;
-          }
-          if (!caption) {
-            const captionElement = document.querySelector("h1, ._a9zs, ._a9zt, ._a9zc");
-            if (captionElement) caption = captionElement.textContent || undefined;
-          }
+            let caption = img ? img.alt : undefined;
+            if (caption && (caption.startsWith("Photo by ") || caption.includes("May be an image of "))) {
+              caption = undefined;
+            }
+            if (!caption) {
+              const captionElement = document.querySelector("h1, ._a9zs, ._a9zt, ._a9zc");
+              if (captionElement) caption = captionElement.textContent || undefined;
+            }
 
-          const href = (targetLink as HTMLAnchorElement).href;
+            const href = (targetLink as HTMLAnchorElement).href;
 
-          const shortcodeMatch = href.match(/\/p\/([^/]+)/);
-          const shortcode = shortcodeMatch ? shortcodeMatch[1] : `unknown_${Date.now()}`;
+            const shortcodeMatch = href.match(/\/p\/([^/]+)/);
+            const shortcode = shortcodeMatch ? shortcodeMatch[1] : `unknown_${Date.now()}`;
 
-          return {
-            shortcode,
-            permalink: href,
-            caption,
-            mediaUrl,
-            timestamp: Date.now()
-          };
+            return {
+              shortcode,
+              permalink: href,
+              caption,
+              mediaUrl,
+              timestamp: Date.now()
+            };
+          });
         });
       }
     }
 
-    if (!post) {
+    if (posts.length === 0) {
       // Helps debugging when HTML layout changes.
       await page.screenshot({ path: "debug.png" });
-      throw new Error("Could not extract latest post from shared data, intercept, or DOM.");
+      throw new Error("Could not extract recent posts from shared data, intercept, or DOM.");
     }
 
-    return post;
+    return posts;
   } finally {
     await browser.close().catch(() => { });
   }

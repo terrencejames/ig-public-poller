@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import type { InstagramPost, ProfileConfig } from "./types";
-import { fetchLatestInstagramPost } from "./instagram";
+import { fetchRecentInstagramPosts } from "./instagram";
 import { readState, writeState, ensureAccountState } from "./state";
 import { sendDiscordNotification, sendDiscordDM, sendDiscordAdminAlert } from "./discord";
 
@@ -25,7 +25,6 @@ function getProfilesConfig(): ProfileConfig[] {
   return watchListStr.split(',').map(pair => {
     const parts = pair.split(':');
     const id = parts[0].trim();
-    // Use the explicit username mapped to the ID, or fallback to the ID if it wasn't mapped
     const username = parts.length > 1 ? parts[1].trim() : id;
 
     return {
@@ -39,7 +38,7 @@ function getProfilesConfig(): ProfileConfig[] {
 async function main(): Promise<void> {
   const profiles = getProfilesConfig();
   if (profiles.length === 0) {
-    console.error("No profiles configured in profiles.json");
+    console.error("No profiles configured.");
     return;
   }
 
@@ -61,11 +60,11 @@ async function main(): Promise<void> {
 
     console.log(`Checking @${displayUsername} (ID: ${accountKey})...`);
 
-    let latest: InstagramPost | null = null;
+    let recentPosts: InstagramPost[] = [];
     try {
-      latest = await fetchLatestInstagramPost(profile.profileUrl);
+      recentPosts = await fetchRecentInstagramPosts(profile.profileUrl);
     } catch (err) {
-      console.error(`Failed to fetch latest post for @${displayUsername}:`, err);
+      console.error(`Failed to fetch latest posts for @${displayUsername}:`, err);
       const msg = err instanceof Error ? err.message : String(err);
       if (msg === "SESSION_EXPIRED" && discordBotToken && discordTargetUserIds.length > 0) {
         console.log("Triggering admin alert for session expiration...");
@@ -76,82 +75,97 @@ async function main(): Promise<void> {
               targetUserId,
               message: "⚠️ **Action Required**: Instagram Session ID has expired or is invalid! Please log into Instagram, copy a fresh `sessionid` cookie, and update your configuration."
             });
-          } catch (alertErr) {
-            console.error(`Failed to send admin alert to ${targetUserId}:`, alertErr);
-          }
+          } catch (alertErr) {}
         }
-        break; // Stop processing further profiles since the session is globally invalid.
+        break; 
       }
       continue;
     }
-    const currentShortcode = latest.shortcode;
+
+    if (recentPosts.length === 0) continue;
+
     const lastShortcode = state.accounts[accountKey]?.lastShortcode ?? null;
-
-    if (lastShortcode === currentShortcode) {
-      console.log(`No new post for @${displayUsername} (latest: ${currentShortcode}).`);
-      continue;
-    }
-
     const isFirstRun = lastShortcode === null;
 
-    // Update state even if first run (prevents repeated notifications once enabled).
-    state.accounts[accountKey] = {
-      ...state.accounts[accountKey],
-      lastShortcode: currentShortcode,
-      lastNotifiedAt: new Date().toISOString(),
-    };
-    stateChanged = true;
-
-    if (!isFirstRun || notifyOnFirstRun) {
-      let notifiedViaWebhook = false;
-      let notifiedViaDM = false;
-
-      const postPayload = {
-        ...latest,
-        caption: latest.caption ? truncate(latest.caption, 1900) : latest.caption,
-      };
-
-      if (discordWebhookUrl) {
-        try {
-          await sendDiscordNotification({
-            webhookUrl: discordWebhookUrl,
-            username: displayUsername,
-            post: postPayload,
-          });
-          notifiedViaWebhook = true;
-        } catch (err) {
-          console.error(`Discord webhook notification failed for @${displayUsername}:`, err);
-        }
+    let newPosts: InstagramPost[] = [];
+    if (isFirstRun) {
+      newPosts = [recentPosts[0]];
+    } else {
+      const lastIndex = recentPosts.findIndex(p => p.shortcode === lastShortcode);
+      if (lastIndex === 0) {
+        console.log(`No new post for @${displayUsername} (latest: ${lastShortcode}).`);
+        continue;
+      } else if (lastIndex === -1) {
+        // Did not find old post in top 5. They posted 6+ times. Notify on all 5.
+        newPosts = [...recentPosts];
+      } else {
+        newPosts = recentPosts.slice(0, lastIndex);
       }
+    }
 
-      if (discordBotToken && discordTargetUserIds.length > 0) {
-        for (const targetUserId of discordTargetUserIds) {
+    // Process posts chronologically (oldest of the new batch first)
+    newPosts.reverse();
+
+    for (const post of newPosts) {
+      if (!isFirstRun || notifyOnFirstRun) {
+        let notifiedViaWebhook = false;
+        let notifiedViaDM = false;
+
+        const postPayload = {
+          ...post,
+          caption: post.caption ? truncate(post.caption, 1900) : post.caption,
+        };
+
+        if (discordWebhookUrl) {
           try {
-            await sendDiscordDM({
-              botToken: discordBotToken,
-              targetUserId: targetUserId,
+            await sendDiscordNotification({
+              webhookUrl: discordWebhookUrl,
               username: displayUsername,
               post: postPayload,
             });
-            notifiedViaDM = true;
+            notifiedViaWebhook = true;
           } catch (err) {
-            console.error(`Discord DM notification failed for target user ${targetUserId} on @${displayUsername}:`, err);
+            console.error(`Discord webhook failed for @${displayUsername}:`, err);
           }
         }
-      }
 
-      const notifyMethods: string[] = [];
-      if (notifiedViaWebhook) notifyMethods.push("webhook");
-      if (notifiedViaDM) notifyMethods.push("DM");
+        if (discordBotToken && discordTargetUserIds.length > 0) {
+          for (const targetUserId of discordTargetUserIds) {
+            try {
+              await sendDiscordDM({
+                botToken: discordBotToken,
+                targetUserId: targetUserId,
+                username: displayUsername,
+                post: postPayload,
+              });
+              notifiedViaDM = true;
+            } catch (err) {
+              console.error(`Discord DM failed for target user ${targetUserId} on @${displayUsername}:`, err);
+            }
+          }
+        }
 
-      if (notifyMethods.length > 0) {
-        console.log(`Discord notified (${notifyMethods.join(" and ")}) for @${displayUsername} (${currentShortcode}).`);
-      } else if (!discordWebhookUrl && !(discordBotToken && discordTargetUserIds.length > 0)) {
-        console.log("No Discord notification methods configured; skipping Discord notification.");
+        const notifyMethods: string[] = [];
+        if (notifiedViaWebhook) notifyMethods.push("webhook");
+        if (notifiedViaDM) notifyMethods.push("DM");
+
+        if (notifyMethods.length > 0) {
+          console.log(`Discord notified (${notifyMethods.join(" and ")}) for @${displayUsername} (${post.shortcode}).`);
+        } else if (!discordWebhookUrl && !(discordBotToken && discordTargetUserIds.length > 0)) {
+          console.log("No Discord notification methods configured.");
+        }
+      } else {
+        console.log(`First run for @${displayUsername}; NOTIFY_ON_FIRST_RUN=false so skipping notify for ${post.shortcode}.`);
       }
-    } else {
-      console.log(`First run for @${displayUsername}; NOTIFY_ON_FIRST_RUN=false so skipping notify.`);
     }
+
+    // Update state to the absolute newest post
+    state.accounts[accountKey] = {
+      ...state.accounts[accountKey],
+      lastShortcode: recentPosts[0].shortcode,
+      lastNotifiedAt: new Date().toISOString(),
+    };
+    stateChanged = true;
   }
 
   if (stateChanged) {
