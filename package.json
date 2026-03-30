@@ -1,0 +1,21 @@
+{
+  "name": "ig-public-poller",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "poll": "node --env-file=.env --import tsx src/index.ts"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": "",
+  "dependencies": {
+    "playwright": "^1.58.2",
+    "tsx": "^4.21.0",
+    "zod": "^4.3.6"
+  },
+  "devDependencies": {
+    "@types/node": "^25.5.0",
+    "typescript": "^6.0.2"
+  }
+}

@@ -1,0 +1,11 @@
+node_modules/
+.playwright/
+playwright/.cache/
+.env
+
+test-api.ts
+test-dom.ts
+test-ig.ts
+test-picuki.ts
+debug.png
+research-mirrors.ts
