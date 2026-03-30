@@ -8,6 +8,7 @@ on:
 jobs:
   poll:
     runs-on: ubuntu-latest
+    environment: ig poller
     permissions:
       contents: write
     steps:
@@ -36,9 +37,7 @@ jobs:
           DISCORD_TARGET_USER_ID: ${{ secrets.DISCORD_TARGET_USER_ID }}
           NOTIFY_ON_FIRST_RUN: ${{ vars.NOTIFY_ON_FIRST_RUN }}
           IG_WATCH_LIST: ${{ secrets.IG_WATCH_LIST }}
-        run: |
-          touch .env
-          npm run poll
+        run: npm run poll
 
       - name: Commit state.json if changed
         if: success()

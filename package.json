@@ -3,7 +3,8 @@
   "version": "1.0.0",
   "private": true,
   "scripts": {
-    "poll": "node --env-file=.env --import tsx src/index.ts"
+    "poll": "node --import tsx src/index.ts",
+    "poll:local": "node --env-file=.env --import tsx src/index.ts"
   },
   "keywords": [],
   "author": "",
