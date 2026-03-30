@@ -58,13 +58,13 @@ async function main(): Promise<void> {
     
     ensureAccountState(state, accountKey);
 
-    console.log(`Checking @${displayUsername} (ID: ${accountKey})...`);
+    console.log(`Checking profile ID: ${accountKey}...`);
 
     let recentPosts: InstagramPost[] = [];
     try {
       recentPosts = await fetchRecentInstagramPosts(profile.profileUrl);
     } catch (err) {
-      console.error(`Failed to fetch latest posts for @${displayUsername}:`, err);
+      console.error(`Failed to fetch latest posts for ID: ${accountKey}:`, err);
       const msg = err instanceof Error ? err.message : String(err);
       if (msg === "SESSION_EXPIRED" && discordBotToken && discordTargetUserIds.length > 0) {
         console.log("Triggering admin alert for session expiration...");
@@ -93,7 +93,7 @@ async function main(): Promise<void> {
     } else {
       const lastIndex = recentPosts.findIndex(p => p.shortcode === lastShortcode);
       if (lastIndex === 0) {
-        console.log(`No new post for @${displayUsername} (latest: ${lastShortcode}).`);
+        console.log(`No new post for ID: ${accountKey} (latest: ${lastShortcode}).`);
         continue;
       } else if (lastIndex === -1) {
         // Did not find old post in top 5. They posted 6+ times. Notify on all 5.
@@ -125,7 +125,7 @@ async function main(): Promise<void> {
             });
             notifiedViaWebhook = true;
           } catch (err) {
-            console.error(`Discord webhook failed for @${displayUsername}:`, err);
+            console.error(`Discord webhook failed for ID: ${accountKey}:`, err);
           }
         }
 
@@ -140,7 +140,7 @@ async function main(): Promise<void> {
               });
               notifiedViaDM = true;
             } catch (err) {
-              console.error(`Discord DM failed for target user ${targetUserId} on @${displayUsername}:`, err);
+              console.error(`Discord DM failed for target user ${targetUserId} on ID: ${accountKey}:`, err);
             }
           }
         }
@@ -150,12 +150,12 @@ async function main(): Promise<void> {
         if (notifiedViaDM) notifyMethods.push("DM");
 
         if (notifyMethods.length > 0) {
-          console.log(`Discord notified (${notifyMethods.join(" and ")}) for @${displayUsername} (${post.shortcode}).`);
+          console.log(`Discord notified (${notifyMethods.join(" and ")}) for ID: ${accountKey} (${post.shortcode}).`);
         } else if (!discordWebhookUrl && !(discordBotToken && discordTargetUserIds.length > 0)) {
           console.log("No Discord notification methods configured.");
         }
       } else {
-        console.log(`First run for @${displayUsername}; NOTIFY_ON_FIRST_RUN=false so skipping notify for ${post.shortcode}.`);
+        console.log(`First run for ID: ${accountKey}; NOTIFY_ON_FIRST_RUN=false so skipping notify for ${post.shortcode}.`);
       }
     }
 
