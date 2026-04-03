@@ -2,12 +2,12 @@ name: Poll Instagram
 
 on:
   schedule:
-    - cron: "*/2 * * * *"
+    - cron: "*/30 * * * *"
   workflow_dispatch:
 
 jobs:
   poll:
-    runs-on: [self-hosted, default]
+    runs-on: ubuntu-latest
     environment: ig poller
     permissions:
       contents: write
