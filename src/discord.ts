@@ -17,14 +17,14 @@ export async function sendDiscordNotification(params: {
   const permalink = post.permalink;
 
   const embed: Record<string, unknown> = {
-    title: `New Instagram post by @${username}`,
+    title: `New deal alert!!!`,
     url: permalink,
     description: caption ? `[${truncate(caption, 4000)}](${permalink})` : undefined,
     timestamp: new Date().toISOString(),
   };
 
   const payload: any = {
-    content: `New Instagram post from @${username}`,
+    content: `New deal alert!!!`,
     embeds: [embed],
   };
 
@@ -75,7 +75,7 @@ export async function sendDiscordDM(params: {
   const { botToken, targetUserId, username, post } = params;
 
   const caption = post.caption?.trim() ?? "";
-  const embedTitle = caption ? truncate(caption, 180) : `New post by @${username}`;
+  const embedTitle = "New deal alert for " + caption.substring(0, caption.indexOf(" ")); // extract the first word, which is usually the name of the place
   const permalink = post.permalink;
 
   const embed: Record<string, unknown> = {
@@ -86,7 +86,6 @@ export async function sendDiscordDM(params: {
   };
 
   const payload: any = {
-    content: `New Instagram post from @${username}`,
     embeds: [embed],
   };
 

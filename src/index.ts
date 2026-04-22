@@ -60,9 +60,10 @@ async function main(): Promise<void> {
 
     console.log(`Checking profile ID: ${accountKey}...`);
 
+    const lastShortcode = state.accounts[accountKey]?.lastShortcode ?? null;
     let recentPosts: InstagramPost[] = [];
     try {
-      recentPosts = await fetchRecentInstagramPosts(profile.profileUrl);
+      recentPosts = await fetchRecentInstagramPosts(profile.profileUrl, lastShortcode);
     } catch (err) {
       console.error(`Failed to fetch latest posts for ID: ${accountKey}:`, err);
       const msg = err instanceof Error ? err.message : String(err);
@@ -84,7 +85,6 @@ async function main(): Promise<void> {
 
     if (recentPosts.length === 0) continue;
 
-    const lastShortcode = state.accounts[accountKey]?.lastShortcode ?? null;
     const isFirstRun = lastShortcode === null;
 
     let newPosts: InstagramPost[] = [];
