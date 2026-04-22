@@ -47,15 +47,13 @@ async function main(): Promise<void> {
 
   const discordWebhookUrl = process.env.DISCORD_WEBHOOK_URL;
   const discordBotToken = process.env.DISCORD_BOT_TOKEN;
-  const discordTargetUserIds = process.env.DISCORD_TARGET_USER_ID
-    ? process.env.DISCORD_TARGET_USER_ID.split(',').map(id => id.trim()).filter(Boolean)
-    : [];
+  const discordAdminUser = process.env.DISCORD_ADMIN_USER_ID;
   const notifyOnFirstRun = process.env.NOTIFY_ON_FIRST_RUN === "true";
 
   for (const profile of profiles) {
     const accountKey = profile.id;
     const displayUsername = profile.username;
-    
+
     ensureAccountState(state, accountKey);
 
     console.log(`Checking profile ID: ${accountKey}...`);
@@ -67,18 +65,16 @@ async function main(): Promise<void> {
     } catch (err) {
       console.error(`Failed to fetch latest posts for ID: ${accountKey}:`, err);
       const msg = err instanceof Error ? err.message : String(err);
-      if (msg === "SESSION_EXPIRED" && discordBotToken && discordTargetUserIds.length > 0) {
+      if (msg === "SESSION_EXPIRED" && discordBotToken && discordAdminUser) {
         console.log("Triggering admin alert for session expiration...");
-        for (const targetUserId of discordTargetUserIds) {
-          try {
-            await sendDiscordAdminAlert({
-              botToken: discordBotToken,
-              targetUserId,
-              message: "⚠️ **Action Required**: Instagram Session ID has expired or is invalid! Please log into Instagram, copy a fresh `sessionid` cookie, and update your configuration."
-            });
-          } catch (alertErr) {}
-        }
-        break; 
+        try {
+          await sendDiscordAdminAlert({
+            botToken: discordBotToken,
+            targetUserId: discordAdminUser,
+            message: "⚠️ **Action Required**: Instagram Session ID has expired or is invalid! Please log into Instagram, copy a fresh `sessionid` cookie, and update your configuration."
+          });
+        } catch (alertErr) { }
+        break;
       }
       continue;
     }
