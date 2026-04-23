@@ -48,6 +48,9 @@ async function main(): Promise<void> {
   const discordWebhookUrl = process.env.DISCORD_WEBHOOK_URL;
   const discordBotToken = process.env.DISCORD_BOT_TOKEN;
   const discordAdminUser = process.env.DISCORD_ADMIN_USER_ID;
+  const discordTargetUserIds = process.env.DISCORD_TARGET_USER_ID
+    ? process.env.DISCORD_TARGET_USER_ID.split(',').map(id => id.trim()).filter(Boolean)
+    : [];
   const notifyOnFirstRun = process.env.NOTIFY_ON_FIRST_RUN === "true";
 
   for (const profile of profiles) {
@@ -76,7 +79,7 @@ async function main(): Promise<void> {
         } catch (alertErr) { }
         break;
       }
-      continue;
+      throw err;
     }
 
     if (recentPosts.length === 0) continue;
