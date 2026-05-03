@@ -2,7 +2,7 @@ name: Poll Instagram
 
 on:
   schedule:
-    - cron: "*/30 * * * *"
+    - cron: "0 */4 * * *"
   workflow_dispatch:
 
 jobs:
@@ -52,4 +52,3 @@ jobs:
           git add state.json
           git commit -m "chore: update instagram poll state"
           git push
-
