@@ -68,13 +68,13 @@ async function main(): Promise<void> {
     } catch (err) {
       console.error(`Failed to fetch latest posts for ID: ${accountKey}:`, err);
       const msg = err instanceof Error ? err.message : String(err);
-      if (msg === "SESSION_EXPIRED" && discordBotToken && discordAdminUser) {
+      if (discordBotToken && discordAdminUser) {
         console.log("Triggering admin alert for session expiration...");
         try {
           await sendDiscordAdminAlert({
             botToken: discordBotToken,
             targetUserId: discordAdminUser,
-            message: "⚠️ **Action Required**: Instagram Session ID has expired or is invalid! Please log into Instagram, copy a fresh `sessionid` cookie, and update your configuration."
+            message: "**Action Required**: Failed to poll recent post. Perhaps session key expired."
           });
         } catch (alertErr) { }
         break;
@@ -106,6 +106,9 @@ async function main(): Promise<void> {
     newPosts.reverse();
 
     for (const post of newPosts) {
+      if (post?.caption?.toLowerCase().includes("review") || post?.caption?.toLowerCase().includes("book")) {
+        continue;
+      }
       if (!isFirstRun || notifyOnFirstRun) {
         let notifiedViaWebhook = false;
         let notifiedViaDM = false;

@@ -196,7 +196,7 @@ export async function fetchRecentInstagramPosts(profileUrl: string, lastKnownSho
           targetLinks = allLinks;
         }
 
-        return targetLinks.slice(0, 5).map(link => {
+        return targetLinks.slice(0, 7).map(link => {
           const href = (link as HTMLAnchorElement).href;
           const shortcodeMatch = href.match(/\/p\/([^/]+)/);
           const img = link.querySelector("img");
@@ -216,7 +216,7 @@ export async function fetchRecentInstagramPosts(profileUrl: string, lastKnownSho
     }
 
     // Determine which posts are new and need full captions
-    const newPosts = lastKnownShortcode 
+    const newPosts = lastKnownShortcode
       ? posts.filter(p => p.shortcode !== lastKnownShortcode).slice(0, posts.findIndex(p => p.shortcode === lastKnownShortcode))
       : [posts[0]];
 
@@ -227,10 +227,10 @@ export async function fetchRecentInstagramPosts(profileUrl: string, lastKnownSho
 
     for (const post of postsToEnrich) {
       try {
-        console.log(`Enriching post: ${post.shortcode}...`);
+        console.log(`Retrieving post details: ${post.shortcode}...`);
         await page.goto(post.permalink, { waitUntil: "domcontentloaded", timeout: 30000 });
         await page.waitForTimeout(1500);
-        
+
         const enriched = await page.evaluate(() => {
           // Extract caption
           const captionSelectors = [
