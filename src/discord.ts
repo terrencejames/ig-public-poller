@@ -14,18 +14,18 @@ export async function sendDiscordNotification(params: {
   const { webhookUrl, username, post } = params;
 
   const caption = post.caption?.trim() ?? "";
+  const embedTitle = "New deal alert for " + caption.substring(0, caption.indexOf(" ")); // extract the first word, which is usually the name of the place
   const permalink = post.permalink;
 
   const embed: Record<string, unknown> = {
-    title: `New deal alert!!!`,
+    title: embedTitle,
     url: permalink,
     description: caption ? `[${truncate(caption, 4000)}](${permalink})` : undefined,
     timestamp: new Date().toISOString(),
   };
 
   const payload: any = {
-    content: `New deal alert!!!`,
-    embeds: [embed],
+    embeds: [embed]
   };
 
   let imageBlob: Blob | null = null;
