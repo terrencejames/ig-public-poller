@@ -53,7 +53,7 @@ function toPermalink(shortcode: string): string {
   return `https://www.instagram.com/p/${shortcode}/`;
 }
 
-export function extractRecentPostsFromSharedData(data: any, limit: number = 5): InstagramPost[] {
+export function extractRecentPostsFromSharedData(data: any, limit: number = 5, allowedTypes: "posts" | "reels" | "both" = "posts"): InstagramPost[] {
   // Support both conventional _sharedData and GraphQL XHR intercept formats
   let edges = data?.entry_data?.ProfilePage?.[0]?.graphql?.user?.edge_owner_to_timeline_media?.edges;
 
@@ -69,7 +69,13 @@ export function extractRecentPostsFromSharedData(data: any, limit: number = 5): 
   // Pinned posts sit at index 0-2. Sort all nodes by taken_at_timestamp descending to guarantee the chronologically latest post.
   const validNodes = edges
     .map((edge) => edge?.node)
-    .filter((n) => n && typeof n.shortcode === "string");
+    .filter((n) => {
+      if (!n || typeof n.shortcode !== "string") return false;
+      const isReel = n.is_video === true && (n.product_type === "clips" || n.video_duration !== undefined);
+      if (allowedTypes === "posts" && isReel) return false;
+      if (allowedTypes === "reels" && !isReel) return false;
+      return true;
+    });
 
   validNodes.sort((a, b) => {
     const timeA = Number(a.taken_at_timestamp) || 0;
@@ -113,7 +119,7 @@ export function extractRecentPostsFromSharedData(data: any, limit: number = 5): 
   });
 }
 
-export async function fetchRecentInstagramPosts(profileUrl: string, lastKnownShortcode?: string | null): Promise<InstagramPost[]> {
+export async function fetchRecentInstagramPosts(profileUrl: string, lastKnownShortcode?: string | null, allowedTypes: "posts" | "reels" | "both" = "posts"): Promise<InstagramPost[]> {
   const isGitHubActions = Boolean(process.env.GITHUB_ACTIONS);
 
   const browser = await chromium.launch({
@@ -164,50 +170,60 @@ export async function fetchRecentInstagramPosts(profileUrl: string, lastKnownSho
 
     let posts: InstagramPost[] = [];
     if (graphqlData) {
-      posts = extractRecentPostsFromSharedData(graphqlData, 5);
+      posts = extractRecentPostsFromSharedData(graphqlData, 5, allowedTypes);
     }
 
     if (posts.length === 0) {
       const html = await page.content();
       const sharedData = extractJsonObjectAfterMarker(html, "window._sharedData =");
-      posts = sharedData ? extractRecentPostsFromSharedData(sharedData, 5) : [];
+      posts = sharedData ? extractRecentPostsFromSharedData(sharedData, 5, allowedTypes) : [];
 
       if (posts.length === 0) {
         const polarisData = extractJsonObjectAfterMarker(html, "\"edge_owner_to_timeline_media\":");
         if (polarisData) {
-          posts = extractRecentPostsFromSharedData({ entry_data: { ProfilePage: [{ graphql: { user: { edge_owner_to_timeline_media: polarisData } } }] } }, 5);
+          posts = extractRecentPostsFromSharedData({ entry_data: { ProfilePage: [{ graphql: { user: { edge_owner_to_timeline_media: polarisData } } }] } }, 5, allowedTypes);
         }
       }
     }
 
     // If we still have no posts via JSON, use DOM scan with pinned post filtering
     if (posts.length === 0) {
-      posts = await page.evaluate(() => {
-        const allLinks = Array.from(document.querySelectorAll("a[href*='/p/']"));
+      posts = await page.evaluate((typeOpt) => {
+        const allLinks = Array.from(document.querySelectorAll("a[href*='/p/'], a[href*='/reel/']"));
 
         // Filter out pinned posts
         let targetLinks = allLinks.filter(link => {
+          const href = link.getAttribute("href") || "";
+          if (typeOpt === "posts" && href.includes("/reel/")) return false;
+          if (typeOpt === "reels" && href.includes("/p/")) return false;
+
           const hasAriaPin = link.querySelector("svg[aria-label='Pinned']");
           const hasTitlePin = Array.from(link.querySelectorAll("title")).some(t => t.textContent?.includes("Pinned"));
           return !hasAriaPin && !hasTitlePin;
         });
 
         if (targetLinks.length === 0) {
-          targetLinks = allLinks;
+          targetLinks = allLinks.filter(link => {
+            const href = link.getAttribute("href") || "";
+            if (typeOpt === "posts" && href.includes("/reel/")) return false;
+            if (typeOpt === "reels" && href.includes("/p/")) return false;
+            return true;
+          });
         }
 
-        return targetLinks.slice(0, 7).map(link => {
-          const href = (link as HTMLAnchorElement).href;
-          const shortcodeMatch = href.match(/\/p\/([^/]+)/);
+        return targetLinks.slice(0, 5).map(link => {
+          const href = link.getAttribute("href") || "";
+          const match = href.match(/\/(?:p|reel)\/([^\/]+)/);
+          const shortcode = match ? match[1] : "";
           const img = link.querySelector("img");
           return {
-            shortcode: shortcodeMatch ? shortcodeMatch[1] : "",
-            permalink: href,
-            mediaUrl: img ? img.src : undefined,
-            timestamp: Date.now()
+            shortcode,
+            permalink: `https://www.instagram.com${href}`,
+            mediaUrl: img?.src,
+            caption: img?.alt,
           };
-        }).filter(p => p.shortcode);
-      });
+        }).filter(p => !!p.shortcode);
+      }, allowedTypes);
     }
 
     if (posts.length === 0) {
@@ -241,9 +257,9 @@ export async function fetchRecentInstagramPosts(profileUrl: string, lastKnownSho
           ];
           let caption: string | null = null;
           for (const sel of captionSelectors) {
-            const el = document.querySelector(sel);
-            if (el && el.textContent && el.textContent.length > 5) {
-              caption = el.textContent;
+            const el = document.querySelector(sel) as HTMLElement;
+            if (el && el.innerText && el.innerText.length > 5) {
+              caption = el.innerText;
               break;
             }
           }

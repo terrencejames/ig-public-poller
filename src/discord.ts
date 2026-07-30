@@ -10,26 +10,48 @@ export async function sendDiscordNotification(params: {
   webhookUrl: string;
   username: string;
   post: InstagramPost;
+  discordConfig?: {
+    embedTitle?: string;
+    includeUrl?: boolean;
+    includeImage?: boolean;
+  };
 }): Promise<void> {
-  const { webhookUrl, username, post } = params;
+  const { webhookUrl, username, post, discordConfig = {} } = params;
+  const { embedTitle: customTitle, includeUrl = true, includeImage = true } = discordConfig;
 
   const caption = post.caption?.trim() ?? "";
-  const embedTitle = "New deal alert for " + caption.substring(0, caption.indexOf(" ")); // extract the first word, which is usually the name of the place
+  
+  let defaultTitle = "New deal alert";
+  const firstWord = caption.substring(0, caption.indexOf(" "));
+  if (firstWord) {
+    defaultTitle = "New deal alert for " + firstWord;
+  }
+  const embedTitle = customTitle ?? defaultTitle;
+
   const permalink = post.permalink;
 
   const embed: Record<string, unknown> = {
     title: embedTitle,
-    url: permalink,
-    description: caption ? `[${truncate(caption, 4000)}](${permalink})` : undefined,
+    url: includeUrl ? permalink : undefined,
     timestamp: new Date().toISOString(),
   };
+
+  if (caption) {
+    if (includeUrl) {
+      embed.description = `${truncate(caption, 3900)}\n\n[View on Instagram](${permalink})`;
+    } else {
+      embed.description = truncate(caption, 4000);
+    }
+  } else if (includeUrl) {
+    embed.description = `[View on Instagram](${permalink})`;
+  }
 
   const payload: any = {
     embeds: [embed]
   };
 
   let imageBlob: Blob | null = null;
-  if (post.mediaUrl) {
+  if (includeImage && post.mediaUrl) {
     try {
       const imgRes = await fetch(post.mediaUrl);
       if (imgRes.ok) {
@@ -71,26 +93,48 @@ export async function sendDiscordDM(params: {
   targetUserId: string;
   username: string;
   post: InstagramPost;
+  discordConfig?: {
+    embedTitle?: string;
+    includeUrl?: boolean;
+    includeImage?: boolean;
+  };
 }): Promise<void> {
-  const { botToken, targetUserId, username, post } = params;
+  const { botToken, targetUserId, username, post, discordConfig = {} } = params;
+  const { embedTitle: customTitle, includeUrl = true, includeImage = true } = discordConfig;
 
   const caption = post.caption?.trim() ?? "";
-  const embedTitle = "New deal alert for " + caption.substring(0, caption.indexOf(" ")); // extract the first word, which is usually the name of the place
+  
+  let defaultTitle = "New deal alert";
+  const firstWord = caption.substring(0, caption.indexOf(" "));
+  if (firstWord) {
+    defaultTitle = "New deal alert for " + firstWord;
+  }
+  const embedTitle = customTitle ?? defaultTitle;
+
   const permalink = post.permalink;
 
   const embed: Record<string, unknown> = {
     title: embedTitle,
-    url: permalink,
-    description: caption ? `[${truncate(caption, 4000)}](${permalink})` : undefined,
+    url: includeUrl ? permalink : undefined,
     timestamp: new Date().toISOString(),
   };
+
+  if (caption) {
+    if (includeUrl) {
+      embed.description = `${truncate(caption, 3900)}\n\n[View on Instagram](${permalink})`;
+    } else {
+      embed.description = truncate(caption, 4000);
+    }
+  } else if (includeUrl) {
+    embed.description = `[View on Instagram](${permalink})`;
+  }
 
   const payload: any = {
     embeds: [embed],
   };
 
   let imageBlob: Blob | null = null;
-  if (post.mediaUrl) {
+  if (includeImage && post.mediaUrl) {
     try {
       const imgRes = await fetch(post.mediaUrl);
       if (imgRes.ok) {

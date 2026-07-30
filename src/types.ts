@@ -10,6 +10,7 @@ export type ProfileConfig = {
   id: string;
   username: string;
   profileUrl: string;
+  allowedTypes: "posts" | "reels" | "both";
 };
 
 export type AppState = {

@@ -4,6 +4,7 @@ import type { InstagramPost, ProfileConfig } from "./types";
 import { fetchRecentInstagramPosts } from "./instagram";
 import { readState, writeState, ensureAccountState } from "./state";
 import { sendDiscordNotification, sendDiscordDM, sendDiscordAdminAlert } from "./discord";
+import { accountProcessors } from "./processors";
 
 type ProfilesFile = {
   accounts: ProfileConfig[];
@@ -26,11 +27,13 @@ function getProfilesConfig(): ProfileConfig[] {
     const parts = pair.split(':');
     const id = parts[0].trim();
     const username = parts.length > 1 ? parts[1].trim() : id;
+    const allowedTypes = (parts.length > 2 ? parts[2].trim().toLowerCase() : "posts") as "posts" | "reels" | "both";
 
     return {
       id,
       username,
-      profileUrl: `https://www.instagram.com/${username}/`
+      profileUrl: `https://www.instagram.com/${username}/`,
+      allowedTypes
     };
   });
 }
@@ -64,7 +67,7 @@ async function main(): Promise<void> {
     const lastShortcode = state.accounts[accountKey]?.lastShortcode ?? null;
     let recentPosts: InstagramPost[] = [];
     try {
-      recentPosts = await fetchRecentInstagramPosts(profile.profileUrl, lastShortcode);
+      recentPosts = await fetchRecentInstagramPosts(profile.profileUrl, lastShortcode, profile.allowedTypes);
     } catch (err) {
       console.error(`Failed to fetch latest posts for ID: ${accountKey}:`, err);
       const msg = err instanceof Error ? err.message : String(err);
@@ -106,24 +109,33 @@ async function main(): Promise<void> {
     newPosts.reverse();
 
     for (const post of newPosts) {
-      if (post?.caption?.toLowerCase().includes("review") || post?.caption?.toLowerCase().includes("book")) {
+      const processor = accountProcessors[accountKey] || accountProcessors["default"];
+      const result = processor(post);
+
+      if (result.action === "skip") {
+        console.log(`[Account ${accountKey}] Skipped post ${post.shortcode}: ${result.skipReason}`);
         continue;
       }
+      
+      const processedPost = result.post;
+
       if (!isFirstRun || notifyOnFirstRun) {
         let notifiedViaWebhook = false;
         let notifiedViaDM = false;
 
         const postPayload = {
-          ...post,
-          caption: post.caption ? truncate(post.caption, 1900) : post.caption,
+          ...processedPost,
+          caption: processedPost.caption ? truncate(processedPost.caption, 1900) : processedPost.caption,
         };
 
-        if (discordWebhookUrl) {
+        const shouldNotifyWebhook = result.notifyWebhook ?? true;
+        if (shouldNotifyWebhook && discordWebhookUrl) {
           try {
             await sendDiscordNotification({
               webhookUrl: discordWebhookUrl,
               username: displayUsername,
               post: postPayload,
+              discordConfig: result.discordConfig
             });
             notifiedViaWebhook = true;
           } catch (err) {
@@ -131,7 +143,8 @@ async function main(): Promise<void> {
           }
         }
 
-        if (discordBotToken && discordTargetUserIds.length > 0) {
+        const shouldNotifyDM = result.notifyDM ?? true;
+        if (shouldNotifyDM && discordBotToken && discordTargetUserIds.length > 0) {
           for (const targetUserId of discordTargetUserIds) {
             try {
               await sendDiscordDM({
@@ -139,6 +152,7 @@ async function main(): Promise<void> {
                 targetUserId: targetUserId,
                 username: displayUsername,
                 post: postPayload,
+                discordConfig: result.discordConfig
               });
               notifiedViaDM = true;
             } catch (err) {
