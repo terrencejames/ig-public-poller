@@ -34,7 +34,7 @@ export const accountProcessors: Record<string, ProcessorFunction> = {
     let caption = post.caption || "";
 
     // Skip if it does not contain food deals
-    if (!caption.toLowerCase().includes("Food Deals")){
+    if (!caption.toLowerCase().includes("food deals")){
       return { action: "skip", post, skipReason: "Does not contain a food deal" };
     }
     // Strip extra / unwanted stuff
