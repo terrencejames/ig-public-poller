@@ -55,6 +55,24 @@ export const accountProcessors: Record<string, ProcessorFunction> = {
     //return { action: "keep", notifyDM: false, post: { ...post, caption } };
 
   },
+
+    "3": (post) => {
+    let caption = post.caption || "";
+
+    // Strip hashtags
+    caption = caption.replace(/#[\p{L}\p{N}_]+/gu, '').trim();
+
+    const captionSplit = caption.split(" ");
+    var captionTitle = "New deal alert";
+    if (captionSplit.length != 0) {
+      const businessName = captionSplit.filter(word => word.startsWith("@"))[0];
+      if (businessName) captionTitle += " for " + businessName;
+    }
+
+    return { action: "keep", post: { ...post, caption }, discordConfig: {embedTitle: captionTitle } };
+    //return { action: "keep", notifyDM: false, post: { ...post, caption } };
+
+  },
   // Fallback default processor for all other accounts
   "default": (post) => {
     let caption = post.caption || "";

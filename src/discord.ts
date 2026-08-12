@@ -37,13 +37,7 @@ export async function sendDiscordNotification(params: {
   };
 
   if (caption) {
-    if (includeUrl) {
-      embed.description = `${truncate(caption, 3900)}\n\n[View on Instagram](${permalink})`;
-    } else {
-      embed.description = truncate(caption, 4000);
-    }
-  } else if (includeUrl) {
-    embed.description = `[View on Instagram](${permalink})`;
+    embed.description = truncate(caption, 4000);
   }
 
   const payload: any = {
@@ -120,13 +114,7 @@ export async function sendDiscordDM(params: {
   };
 
   if (caption) {
-    if (includeUrl) {
-      embed.description = `${truncate(caption, 3900)}\n\n[View on Instagram](${permalink})`;
-    } else {
-      embed.description = truncate(caption, 4000);
-    }
-  } else if (includeUrl) {
-    embed.description = `[View on Instagram](${permalink})`;
+    embed.description = truncate(caption, 4000);
   }
 
   const payload: any = {
