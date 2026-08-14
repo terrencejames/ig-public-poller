@@ -18,7 +18,7 @@ type ProcessorFunction = (post: InstagramPost) => ProcessResult;
 export const accountProcessors: Record<string, ProcessorFunction> = {
   "1": (post) => {
     let caption = post.caption || "";
-    
+
     // Skip if it contains "review" or "book"
     if (caption.toLowerCase().includes("review") || caption.toLowerCase().includes("book")) {
       return { action: "skip", post, skipReason: "Contains 'review' or 'book'" };
@@ -34,7 +34,7 @@ export const accountProcessors: Record<string, ProcessorFunction> = {
     let caption = post.caption || "";
 
     // Skip if it does not contain food deals
-    if (!caption.toLowerCase().includes("food deals")){
+    if (!caption.toLowerCase().includes("food deals")) {
       return { action: "skip", post, skipReason: "Does not contain a food deal" };
     }
     // Strip extra / unwanted stuff
@@ -49,14 +49,15 @@ export const accountProcessors: Record<string, ProcessorFunction> = {
     if (captionSplit.length != 0) {
       captionTitle = captionSplit[0];
       caption = caption.replace(captionTitle, "");
+      caption += "\n\n Please refer to their specific websites for latest details as applicable promo codes may change."
     }
 
-    return { action: "keep", post: { ...post, caption }, discordConfig: {includeUrl: false, includeImage: false, embedTitle: captionTitle } };
+    return { action: "keep", post: { ...post, caption }, discordConfig: { includeUrl: false, includeImage: false, embedTitle: captionTitle } };
     //return { action: "keep", notifyDM: false, post: { ...post, caption } };
 
   },
 
-    "3": (post) => {
+  "3": (post) => {
     let caption = post.caption || "";
 
     // Strip hashtags
@@ -69,17 +70,17 @@ export const accountProcessors: Record<string, ProcessorFunction> = {
       if (businessName) captionTitle += " for " + businessName;
     }
 
-    return { action: "keep", post: { ...post, caption }, discordConfig: {embedTitle: captionTitle } };
+    return { action: "keep", post: { ...post, caption }, discordConfig: { embedTitle: captionTitle } };
     //return { action: "keep", notifyDM: false, post: { ...post, caption } };
 
   },
   // Fallback default processor for all other accounts
   "default": (post) => {
     let caption = post.caption || "";
-    
+
     // Strip hashtags by default
     caption = caption.replace(/#[\p{L}\p{N}_]+/gu, '').trim();
-    
+
     return { action: "keep", notifyDM: false, post: { ...post, caption } };
   }
 };
