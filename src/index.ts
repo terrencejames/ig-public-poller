@@ -56,7 +56,15 @@ async function main(): Promise<void> {
     : [];
   const notifyOnFirstRun = process.env.NOTIFY_ON_FIRST_RUN === "true";
 
+  const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+
   for (const profile of profiles) {
+    if (profiles.indexOf(profile) > 0) {
+      const waitTime = Math.floor(Math.random() * (15000 - 5000 + 1)) + 5000;
+      console.log(`Sleeping for ${Math.round(waitTime / 1000)}s to prevent rate limiting...`);
+      await delay(waitTime);
+    }
+
     const accountKey = profile.id;
     const displayUsername = profile.username;
 

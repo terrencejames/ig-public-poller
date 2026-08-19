@@ -162,7 +162,9 @@ export async function fetchRecentInstagramPosts(profileUrl: string, lastKnownSho
     });
 
     await page.goto(profileUrl, { waitUntil: "domcontentloaded", timeout: 45000 });
-    await page.waitForTimeout(2000);
+    // Jittered wait between 1.5s and 3s to appear human
+    const profileWait = Math.floor(Math.random() * (3000 - 1500 + 1)) + 1500;
+    await page.waitForTimeout(profileWait);
 
     if (page.url().includes("/accounts/login/")) {
       throw new Error("SESSION_EXPIRED");
@@ -242,10 +244,19 @@ export async function fetchRecentInstagramPosts(profileUrl: string, lastKnownSho
       : newPosts;
 
     for (const post of postsToEnrich) {
+      if (postsToEnrich.indexOf(post) > 0) {
+        const postDelay = Math.floor(Math.random() * (7000 - 3000 + 1)) + 3000;
+        console.log(`Sleeping for ${Math.round(postDelay / 1000)}s before fetching next post details...`);
+        await page.waitForTimeout(postDelay);
+      }
+
       try {
         console.log(`Retrieving post details: ${post.shortcode}...`);
         await page.goto(post.permalink, { waitUntil: "domcontentloaded", timeout: 30000 });
-        await page.waitForTimeout(1500);
+        
+        // Jittered wait between 1.5s and 3s for post detail load
+        const detailWait = Math.floor(Math.random() * (3000 - 1500 + 1)) + 1500;
+        await page.waitForTimeout(detailWait);
 
         const enriched = await page.evaluate(() => {
           // Extract caption
