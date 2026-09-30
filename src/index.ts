@@ -60,7 +60,7 @@ async function main(): Promise<void> {
 
   for (const profile of profiles) {
     if (profiles.indexOf(profile) > 0) {
-      const waitTime = Math.floor(Math.random() * (15000 - 5000 + 1)) + 5000;
+      const waitTime = Math.floor(Math.random() * (15000 - 5000 + 1)) + 7000;
       console.log(`Sleeping for ${Math.round(waitTime / 1000)}s to prevent rate limiting...`);
       await delay(waitTime);
     }

@@ -255,7 +255,7 @@ export async function fetchRecentInstagramPosts(profileUrl: string, lastKnownSho
         await page.goto(post.permalink, { waitUntil: "domcontentloaded", timeout: 30000 });
         
         // Jittered wait between 1.5s and 3s for post detail load
-        const detailWait = Math.floor(Math.random() * (3000 - 1500 + 1)) + 1500;
+        const detailWait = Math.floor(Math.random() * (3000 - 1500 + 1)) + 4000;
         await page.waitForTimeout(detailWait);
 
         const enriched = await page.evaluate(() => {
